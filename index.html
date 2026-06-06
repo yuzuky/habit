@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Sync Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .glass { background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.5); }
+        .done { background: #22c55e !important; color: white; }
+        .todo { background: #ef4444 !important; color: white; }
+        .empty { background: #e2e8f0 !important; color: white; }
+        body { background: #f8fafc; }
+    </style>
+</head>
+<body class="p-4 pb-24 max-w-md mx-auto">
+
+    <div class="text-center pt-8 pb-6">
+        <p class="text-[10px] text-slate-400 font-bold tracking-[0.2em] uppercase">試験まであと</p>
+        <div id="daysLeft" class="text-7xl font-bold tracking-tighter">--<span class="text-2xl font-normal ml-1">日</span></div>
+    </div>
+
+    <div class="glass p-6 rounded-[2rem] shadow-xl space-y-4 mb-6">
+        <div class="grid grid-cols-2 gap-3">
+            <div id="m-status" class="p-4 rounded-2xl border-2 border-slate-200 text-center font-bold text-xs">AM 7:30-8:30</div>
+            <div id="e-status" class="p-4 rounded-2xl border-2 border-slate-200 text-center font-bold text-xs">PM 18:00-19:00</div>
+        </div>
+        <div id="timerDisplay" class="text-center text-5xl font-mono font-light py-4">00:00</div>
+        <button id="timerBtn" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold active:scale-95 transition">START</button>
+    </div>
+
+    <div class="glass p-6 rounded-[2rem] mb-6">
+        <h2 class="text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-widest">TRAINING (YESTERDAY + 1)</h2>
+        <div class="grid grid-cols-2 gap-2">
+            <input type="number" id="absInput" placeholder="腹筋：目標 --回" class="bg-white/50 p-4 rounded-2xl border-none">
+            <input type="number" id="pushInput" placeholder="腕立て：目標 --回" class="bg-white/50 p-4 rounded-2xl border-none">
+        </div>
+    </div>
+
+    <div class="fixed bottom-0 left-0 w-full p-4 z-50">
+        <button id="openModalBtn" class="w-full glass py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 border border-white/50">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="12" width="4" height="8" fill="#1e293b"/><rect x="10" y="8" width="4" height="12" fill="#94a3b8"/><rect x="17" y="4" width="4" height="16" fill="#ffffff" stroke="#e2e8f0"/></svg>
+            <span class="font-bold text-slate-700">カレンダーで分析を確認</span>
+        </button>
+    </div>
+
+    <div id="modal" class="hidden fixed inset-0 bg-slate-100 z-[100] p-6 overflow-y-auto">
+        <div class="text-center mb-8">
+            <p class="text-[10px] text-slate-400 uppercase tracking-widest">今までの合計勉強時間</p>
+            <p id="totalAllStudy" class="text-2xl font-bold text-slate-800">0<span class="text-xs text-slate-400 ml-1">時間</span></p>
+        </div>
+        
+        <div class="flex justify-between items-center mb-6">
+            <button id="prevMonth" class="text-slate-400 text-2xl font-bold p-2">◀</button>
+            <span id="monthDisplay" class="text-lg font-bold">2026年 6月</span>
+            <button id="nextMonth" class="text-slate-400 text-2xl font-bold p-2">▶</button>
+        </div>
+
+        <div id="calendarDays" class="grid grid-cols-7 gap-1 mb-4"></div>
+        
+        <div class="text-center mt-4">
+            <span class="text-[10px] text-slate-400">合計勉強時間</span>
+            <span id="monthlyTotalTime" class="text-lg font-bold text-slate-900 mx-2">0</span>
+            <span class="text-[10px] text-slate-400">時間</span>
+        </div>
+
+        <button id="closeModalBtn" class="w-full py-4 bg-slate-800 text-white rounded-2xl mt-10">CLOSE</button>
+    </div>
+
+    <script>
+        let currentViewDate = new Date();
+        const logs = JSON.parse(localStorage.getItem('logs') || '{}');
+
+        // 昨日+1の計算ロジック
+        function setTrainingPlaceholders() {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const dateKey = yesterday.toISOString().split('T')[0];
+            const yesterdayData = logs[dateKey] || { abs: 0, push: 0 };
+            
+            document.getElementById('absInput').placeholder = `腹筋：目標 ${parseInt(yesterdayData.abs) + 1}回`;
+            document.getElementById('pushInput').placeholder = `腕立て：目標 ${parseInt(yesterdayData.push) + 1}回`;
+        }
+
+        function updateTotals() {
+            let totalAllMins = 0;
+            let monthlyMins = 0;
+            Object.keys(logs).forEach(dateKey => {
+                const data = logs[dateKey];
+                totalAllMins += (data.study || 0);
+                if (dateKey.startsWith(`${currentViewDate.getFullYear()}-${(currentViewDate.getMonth()+1).toString().padStart(2,'0')}`)) {
+                    monthlyMins += (data.study || 0);
+                }
+            });
+            document.getElementById('totalAllStudy').innerHTML = `${Math.floor(totalAllMins/60)}<span class="text-xs text-slate-400 ml-1">時間</span>`;
+            document.getElementById('monthlyTotalTime').innerText = Math.floor(monthlyMins/60);
+        }
+
+        function renderCalendar() {
+            const container = document.getElementById('calendarDays');
+            container.innerHTML = '';
+            const year = currentViewDate.getFullYear();
+            const month = currentViewDate.getMonth();
+            document.getElementById('monthDisplay').innerText = `${year}年 ${month + 1}月`;
+            updateTotals();
+
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateKey = `${year}-${(month+1).toString().padStart(2,'0')}-${i.toString().padStart(2,'0')}`;
+                const data = logs[dateKey] || { study: 0, abs: 0, push: 0 };
+                container.innerHTML += `
+                    <div class="aspect-square glass rounded-lg p-0.5 flex flex-col items-center">
+                        <span class="text-[8px]">${i}</span>
+                        <div class="w-full flex flex-col gap-0.5 mt-1">
+                            <div class="h-2 rounded-[1px] ${data.study > 60 ? 'done' : data.study > 0 ? 'todo' : 'empty'}"></div>
+                            <div class="h-2 rounded-[1px] ${data.abs > 0 ? 'done' : 'empty'}"></div>
+                            <div class="h-2 rounded-[1px] ${data.push > 0 ? 'done' : 'empty'}"></div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 初期化時に実行
+        setTrainingPlaceholders();
+        document.getElementById('openModalBtn').onclick = () => { currentViewDate = new Date(); renderCalendar(); document.getElementById('modal').classList.remove('hidden'); };
+        document.getElementById('closeModalBtn').onclick = () => { document.getElementById('modal').classList.add('hidden'); };
+        document.getElementById('prevMonth').onclick = () => { currentViewDate.setMonth(currentViewDate.getMonth() - 1); renderCalendar(); };
+        document.getElementById('nextMonth').onclick = () => { currentViewDate.setMonth(currentViewDate.getMonth() + 1); renderCalendar(); };
+        document.getElementById('daysLeft').innerHTML = Math.ceil((new Date('2026-11-08') - new Date())/(1000*60*60*24)) + '<span class="text-2xl font-normal ml-1">日</span>';
+    </script>
+</body>
+</html>
